@@ -1,0 +1,6 @@
+[package]
+name = "git-auto-pilot"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
