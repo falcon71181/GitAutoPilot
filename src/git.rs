@@ -70,3 +70,69 @@ pub fn update_repo(repo: &Repository, force_update: bool) -> Result<(), GitError
 
     Ok(())
 }
+
+/// Lists newly added files (files that are unstaged for commit).
+///
+/// # Arguments
+///
+/// * `repo` - A reference to the `git2::Repository` object.
+///
+/// # Returns
+///
+/// * `Result<Vec<String>, git2::Error>` - A list of paths to the newly added files, or an error.
+pub fn list_newly_added_files(repo: &Repository) -> Result<Vec<String>, git2::Error> {
+    // Get the repository's status
+    let statuses = repo.statuses(None)?;
+
+    let newly_added_files: Vec<String> = statuses
+        .iter()
+        .filter(|entry| entry.status().is_wt_new())
+        .map(|entry| entry.path().unwrap_or_default().to_string())
+        .collect();
+
+    Ok(newly_added_files)
+}
+
+/// Lists modified files (files that are unstaged for commit).
+///
+/// # Arguments
+///
+/// * `repo` - A reference to the `git2::Repository` object.
+///
+/// # Returns
+///
+/// * `Result<Vec<String>, git2::Error>` - A list of paths to the modified files, or an error.
+pub fn list_modified_files(repo: &Repository) -> Result<Vec<String>, git2::Error> {
+    // Get the repository's status
+    let statuses = repo.statuses(None)?;
+
+    let modified_files: Vec<String> = statuses
+        .iter()
+        .filter(|entry| entry.status().is_wt_modified())
+        .map(|entry| entry.path().unwrap_or_default().to_string())
+        .collect();
+
+    Ok(modified_files)
+}
+
+/// Lists deleted files (files that are unstaged for commit).
+///
+/// # Arguments
+///
+/// * `repo` - A reference to the `git2::Repository` object.
+///
+/// # Returns
+///
+/// * `Result<Vec<String>, git2::Error>` - A list of paths to the deleted files, or an error.
+pub fn list_deleted_files(repo: &Repository) -> Result<Vec<String>, git2::Error> {
+    // Get the repository's status
+    let statuses = repo.statuses(None)?;
+
+    let deleted_files: Vec<String> = statuses
+        .iter()
+        .filter(|entry| entry.status().is_wt_deleted())
+        .map(|entry| entry.path().unwrap_or_default().to_string())
+        .collect();
+
+    Ok(deleted_files)
+}
