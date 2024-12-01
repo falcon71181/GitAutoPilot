@@ -1,5 +1,14 @@
-use git2::{Error as GitError, Repository};
-use std::process::Command;
+use git2::{DiffOptions, Error as GitError, Repository, Status};
+use std::{collections::HashMap, process::Command};
+
+/// Detailed information about changes in a file
+#[derive(Debug)]
+pub struct FileChangeStats {
+    pub lines_added: usize,
+    pub lines_deleted: usize,
+    pub lines_modified: usize,
+    pub status: Status,
+}
 
 /// Gets the name of the currently checked-out branch.
 /// If no branch is found (e.g., in a detached HEAD state), defaults to "master".
@@ -71,7 +80,7 @@ pub fn update_repo(repo: &Repository, force_update: bool) -> Result<(), GitError
     Ok(())
 }
 
-/// Lists newly added files (files that are unstaged for commit).
+/// Comprehensive repository change analysis
 ///
 /// # Arguments
 ///
@@ -79,60 +88,80 @@ pub fn update_repo(repo: &Repository, force_update: bool) -> Result<(), GitError
 ///
 /// # Returns
 ///
-/// * `Result<Vec<String>, git2::Error>` - A list of paths to the newly added files, or an error.
-pub fn list_newly_added_files(repo: &Repository) -> Result<Vec<String>, git2::Error> {
-    // Get the repository's status
-    let statuses = repo.statuses(None)?;
+/// * `Result<HashMap<String, Vec<(Status, FileChangeStats)>>, git2::Error>` - Comprehensive changes grouped by file type
+pub fn analyze_repository_changes(
+    repo: &Repository,
+) -> Result<HashMap<String, Vec<(Status, FileChangeStats)>>, git2::Error> {
+    // Create an empty diff options to analyze all changes
+    let mut diff_options = DiffOptions::new();
+    diff_options.context_lines(0);
 
-    let newly_added_files: Vec<String> = statuses
-        .iter()
-        .filter(|entry| entry.status().is_wt_new())
-        .map(|entry| entry.path().unwrap_or_default().to_string())
-        .collect();
+    // Get the diff between working directory and HEAD
+    let diff = repo.diff_index_to_workdir(None, Some(&mut diff_options))?;
 
-    Ok(newly_added_files)
+    // Analyze changes for each file
+    let mut repository_changes: HashMap<String, Vec<(Status, FileChangeStats)>> = HashMap::new();
+
+    diff.foreach(
+        &mut |delta, _| {
+            // Try both new and old file paths to capture all changes
+            let path_opt = delta.new_file().path().or_else(|| delta.old_file().path());
+
+            if let Some(path) = path_opt {
+                let path_str = path.to_string_lossy().to_string();
+
+                // Get the status of the file
+                let status = repo.status_file(path).unwrap_or(Status::empty());
+
+                // Analyze line changes
+                let stats = diff.stats().unwrap();
+
+                let file_stats = FileChangeStats {
+                    lines_added: stats.insertions(),
+                    lines_deleted: stats.deletions(),
+                    lines_modified: stats.insertions() + stats.deletions(),
+                    status,
+                };
+
+                // Group changes by file path
+                repository_changes
+                    .entry(path_str)
+                    .or_default()
+                    .push((status, file_stats));
+            }
+            true
+        },
+        None,
+        None,
+        Some(&mut |_, _, _| true),
+    )?;
+
+    Ok(repository_changes)
 }
 
-/// Lists modified files (files that are unstaged for commit).
-///
-/// # Arguments
-///
-/// * `repo` - A reference to the `git2::Repository` object.
-///
-/// # Returns
-///
-/// * `Result<Vec<String>, git2::Error>` - A list of paths to the modified files, or an error.
-pub fn list_modified_files(repo: &Repository) -> Result<Vec<String>, git2::Error> {
-    // Get the repository's status
+/// Helper function to filter files by status
+pub fn filter_files_by_status<F>(
+    repo: &Repository,
+    status_check: F,
+) -> Result<Vec<String>, git2::Error>
+where
+    F: Fn(Status) -> bool, // This allows the closure to capture variables
+{
     let statuses = repo.statuses(None)?;
 
-    let modified_files: Vec<String> = statuses
+    let filtered_files: Vec<String> = statuses
         .iter()
-        .filter(|entry| entry.status().is_wt_modified())
-        .map(|entry| entry.path().unwrap_or_default().to_string())
+        .filter(|entry| status_check(entry.status()))
+        .filter_map(|entry| entry.path().map(|path| path.to_string()))
         .collect();
 
-    Ok(modified_files)
+    Ok(filtered_files)
 }
 
-/// Lists deleted files (files that are unstaged for commit).
-///
-/// # Arguments
-///
-/// * `repo` - A reference to the `git2::Repository` object.
-///
-/// # Returns
-///
-/// * `Result<Vec<String>, git2::Error>` - A list of paths to the deleted files, or an error.
-pub fn list_deleted_files(repo: &Repository) -> Result<Vec<String>, git2::Error> {
-    // Get the repository's status
-    let statuses = repo.statuses(None)?;
-
-    let deleted_files: Vec<String> = statuses
-        .iter()
-        .filter(|entry| entry.status().is_wt_deleted())
-        .map(|entry| entry.path().unwrap_or_default().to_string())
-        .collect();
-
-    Ok(deleted_files)
+/// Get files with specific status
+pub fn get_files_with_status(
+    repo: &Repository,
+    status: Status,
+) -> Result<Vec<String>, git2::Error> {
+    filter_files_by_status(repo, |file_status| file_status == status)
 }
