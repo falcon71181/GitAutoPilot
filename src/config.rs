@@ -352,3 +352,66 @@ impl Config {
         self.repos.extend(other.repos);
     }
 }
+
+/// Example usage
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_default_config() {
+        let config = Config::default();
+        assert!(config.repos.is_empty());
+        assert!(!config.variables.is_null());
+    }
+
+    #[test]
+    fn test_config_merge() {
+        let mut base_config = Config::default();
+
+        // Create a configuration with specific fields to update
+        let update_config = Config {
+            message: CommitSummary {
+                create: Message {
+                    comment: "Custom Create Message".to_string(),
+                    ..Default::default() // Use default values for other fields
+                },
+                ..Default::default() // Use default values for other fields
+            },
+            variables: serde_json::json!({"new_var": "test_value"}),
+            repos: vec![PathBuf::from("/test/repo")],
+            ..Default::default() // Use default values for other fields
+        };
+
+        // Merge update_config into base_config
+        base_config.merge(update_config);
+
+        // Test that the "create" commit message was updated
+        assert_eq!(base_config.message.create.comment, "Custom Create Message");
+
+        // Test that the new variable "new_var" was added to variables
+        assert!(base_config.variables["new_var"].as_str().is_some());
+        assert_eq!(
+            base_config.variables["new_var"].as_str().unwrap(),
+            "test_value"
+        );
+
+        // Test that the repository was added
+        assert_eq!(base_config.repos.len(), 1);
+        assert_eq!(base_config.repos[0], PathBuf::from("/test/repo"));
+
+        // Ensure that other fields are not overwritten by the merge
+        // The default values should remain as-is for fields that are not updated in update_config
+        assert_eq!(
+            base_config.message.modify.comment,
+            "File Modified: {{FILE_NAME_SHORT}}"
+        );
+        assert_eq!(
+            base_config.message.remove.comment,
+            "File Removed: {{FILE_NAME_SHORT}}"
+        );
+
+        // Test that variables not included in the update remain unchanged
+        assert!(base_config.variables["INSERTIONS"].as_str().is_some());
+    }
+}
