@@ -1,7 +1,7 @@
 use fern::colors::{Color, ColoredLevelConfig};
 use std::{io, time::SystemTime};
 
-fn setup_logging(verbosity: u64) -> Result<(), fern::InitError> {
+pub fn setup_logging(verbosity: u64) -> Result<(), fern::InitError> {
     // Base configuration for logging
     let mut base_config = fern::Dispatch::new();
 
