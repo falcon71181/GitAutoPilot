@@ -2,7 +2,7 @@ use git2::{DiffOptions, Error as GitError, Repository, Status};
 use std::{collections::HashMap, process::Command};
 
 /// Detailed information about changes in a file
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct FileChangeStats {
     pub lines_added: usize,
     pub lines_deleted: usize,
