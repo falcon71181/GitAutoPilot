@@ -23,8 +23,10 @@ use thiserror::Error;
 pub struct Message {
     /// Prefix text for the message
     pub prefix: String,
+
     /// Main comment body with potential variable placeholders
     pub comment: String,
+
     /// Suffix text for the message
     pub suffix: String,
 }
@@ -40,8 +42,10 @@ pub struct Message {
 pub struct CommitSummary {
     /// Template for file creation events
     pub create: Message,
+
     /// Template for file modification events
     pub modify: Message,
+
     /// Template for file removal events
     pub remove: Message,
 }
@@ -57,8 +61,10 @@ pub struct CommitSummary {
 pub struct Description {
     /// Template for file creation descriptions
     pub create: Message,
+
     /// Template for file modification descriptions
     pub modify: Message,
+
     /// Template for file removal descriptions
     pub remove: Message,
 }
@@ -74,6 +80,7 @@ pub enum ConfigError {
     /// Occurs when JSON parsing fails
     #[error("Failed to parse configuration JSON: {0}")]
     JsonParseError(#[from] serde_json::Error),
+
     /// Occurs when file operations fail
     #[error("File operation error: {0}")]
     FileError(String),
@@ -82,14 +89,7 @@ pub enum ConfigError {
 // Log the error details when the ConfigError is being dropped
 impl Drop for ConfigError {
     fn drop(&mut self) {
-        match self {
-            ConfigError::JsonParseError(err) => {
-                log::error!("JSON Parse Error being dropped: {}", err);
-            }
-            ConfigError::FileError(msg) => {
-                log::error!("File Error being dropped: {}", msg);
-            }
-        }
+        log::error!("{}", self);
     }
 }
 
@@ -105,11 +105,14 @@ impl Drop for ConfigError {
 pub struct Config {
     /// Commit summary message templates
     pub message: CommitSummary,
+
     /// Detailed description templates
     pub description: Description,
+
     /// Custom variables for template substitution
     #[serde(default = "default_variables")]
     pub variables: serde_json::Value,
+
     /// List of repository paths to track
     #[serde(default)]
     pub repos: Vec<PathBuf>,
