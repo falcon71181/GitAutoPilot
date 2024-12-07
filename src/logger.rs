@@ -11,7 +11,7 @@ pub fn setup_logging(verbosity: u64) -> Result<(), fern::InitError> {
         .warn(Color::Yellow)
         .info(Color::Cyan)
         .debug(Color::Green)
-        .trace(Color::BrightMagenta);
+        .trace(Color::BrightBlack);
 
     // Set log level based on verbosity
     base_config = match verbosity {
