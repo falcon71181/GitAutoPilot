@@ -79,6 +79,20 @@ pub enum ConfigError {
     FileError(String),
 }
 
+// Log the error details when the ConfigError is being dropped
+impl Drop for ConfigError {
+    fn drop(&mut self) {
+        match self {
+            ConfigError::JsonParseError(err) => {
+                log::error!("JSON Parse Error being dropped: {}", err);
+            }
+            ConfigError::FileError(msg) => {
+                log::error!("File Error being dropped: {}", msg);
+            }
+        }
+    }
+}
+
 /// Main configuration structure
 ///
 /// This struct holds the entire configuration for generating commit messages
