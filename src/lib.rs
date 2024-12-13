@@ -3,8 +3,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use config::ConfigError;
-use log::error;
-use log::{debug, info, trace, warn};
+use log::{debug, info, trace, warn, error};
 use serde::Deserialize;
 use serde::Serialize;
 use thiserror::Error;
@@ -46,6 +45,13 @@ pub enum GitAutoPilotError {
     /// Wrapper for standard IO errors
     #[error(transparent)]
     IOError(#[from] std::io::Error),
+}
+
+// Log the error details when the GitAutoPilotError is being dropped
+impl Drop for GitAutoPilotError {
+    fn drop(&mut self) {
+        error!("{}", self);
+    }
 }
 
 impl GitAutoPilot {
