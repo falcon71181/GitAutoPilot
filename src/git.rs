@@ -1,4 +1,5 @@
-use git2::{DiffOptions, Error as GitError, Repository, Status};
+use git2::{DiffOptions, Error as GitError, Repository, Status, StatusOptions};
+use log::debug;
 use std::{collections::HashMap, process::Command};
 
 /// Detailed information about changes in a file
@@ -92,50 +93,64 @@ pub fn update_repo(repo: &Repository, force_update: bool) -> Result<(), GitError
 pub fn analyze_repository_changes(
     repo: &Repository,
 ) -> Result<HashMap<String, Vec<(Status, FileChangeStats)>>, git2::Error> {
-    // Create an empty diff options to analyze all changes
+    // Create status options
+    let mut status_opts = StatusOptions::new();
+    status_opts.include_untracked(true);
+    status_opts.recurse_untracked_dirs(true);
+    status_opts.include_unmodified(true);
+
+    // Create diff options for additional details
     let mut diff_options = DiffOptions::new();
     diff_options.context_lines(0);
 
-    // Get the diff between working directory and HEAD
-    let diff = repo.diff_index_to_workdir(None, Some(&mut diff_options))?;
+    // Get repository status to capture all changes
+    let statuses = repo.statuses(Some(&mut status_opts))?;
+    debug!("Total statuses found: {}", statuses.len());
 
     // Analyze changes for each file
     let mut repository_changes: HashMap<String, Vec<(Status, FileChangeStats)>> = HashMap::new();
 
-    diff.foreach(
-        &mut |delta, _| {
-            // Try both new and old file paths to capture all changes
-            let path_opt = delta.new_file().path().or_else(|| delta.old_file().path());
+    for entry in statuses.iter() {
+        let status = entry.status();
 
-            if let Some(path) = path_opt {
-                let path_str = path.to_string_lossy().to_string();
+        // Skip entries with zero status or ignored files
+        if status.is_empty() || status.is_ignored() {
+            continue;
+        }
 
-                // Get the status of the file
-                let status = repo.status_file(path).unwrap_or(Status::empty());
+        if let Some(path) = entry.path() {
+            debug!("Processing path: {} - Status: {:?}", path, status);
 
-                // Analyze line changes
-                let stats = diff.stats().unwrap();
+            // Try to get more detailed diff information
+            let file_stats = match repo.diff_index_to_workdir(None, Some(&mut diff_options)) {
+                Ok(diff) => {
+                    // TODO: make it safer
+                    let stats = diff.stats().unwrap();
+                    // let stats = diff.stats().unwrap_or_else(|_| {
+                    //     debug!("No diff stats found for path: {}", path);
+                    //     DiffStats { raw: "" }
+                    // });
+                    FileChangeStats {
+                        lines_added: stats.insertions(),
+                        lines_deleted: stats.deletions(),
+                        lines_modified: stats.insertions() + stats.deletions(),
+                        status,
+                    }
+                }
+                Err(e) => {
+                    debug!("Error getting diff for path {}: {:?}", path, e);
+                    continue;
+                }
+            };
 
-                let file_stats = FileChangeStats {
-                    lines_added: stats.insertions(),
-                    lines_deleted: stats.deletions(),
-                    lines_modified: stats.insertions() + stats.deletions(),
-                    status,
-                };
+            repository_changes
+                .entry(path.to_string())
+                .or_default()
+                .push((status, file_stats));
+        }
+    }
 
-                // Group changes by file path
-                repository_changes
-                    .entry(path_str)
-                    .or_default()
-                    .push((status, file_stats));
-            }
-            true
-        },
-        None,
-        None,
-        Some(&mut |_, _, _| true),
-    )?;
-
+    debug!("Repository changes found: {}", repository_changes.len());
     Ok(repository_changes)
 }
 
