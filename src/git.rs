@@ -1,6 +1,6 @@
 use git2::{DiffOptions, Error as GitError, Repository, Status, StatusOptions};
-use log::debug;
-use std::{collections::HashMap, process::Command};
+use log::{debug, trace};
+use std::{collections::HashMap, path::Path, process::Command};
 
 /// Detailed information about changes in a file
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -149,7 +149,34 @@ pub fn analyze_repository_changes(
         }
     }
 
+    if repository_changes.len() == 2 {
+        let keys: Vec<&String> = repository_changes.keys().collect();
+        if keys.len() == 2 {
+            let first_key = keys[0];
+            let second_key = keys[1];
+
+            if let (Some(first_changes), Some(second_changes)) = (
+                repository_changes.get(first_key),
+                repository_changes.get(second_key),
+            ) {
+                // Borrow references without cloning
+                let old_path_changes = HashMap::from([(first_key.as_str(), &first_changes[0])]);
+                let new_path_changes = HashMap::from([(second_key.as_str(), &second_changes[0])]);
+
+                if let Some(renamed_changes) =
+                    are_files_renamed(repo, &old_path_changes, &new_path_changes)
+                {
+                    // Replace the entire repository_changes with the renamed changes
+                    repository_changes = renamed_changes
+                        .into_iter()
+                        .map(|(k, v)| (k, vec![v]))
+                        .collect();
+                }
+            }
+        }
+    }
     debug!("Repository changes found: {}", repository_changes.len());
+
     Ok(repository_changes)
 }
 
@@ -178,4 +205,59 @@ pub fn get_files_with_status(
     status: Status,
 ) -> Result<Vec<String>, git2::Error> {
     filter_files_by_status(repo, |file_status| file_status == status)
+}
+
+/// Check if two files are likely a result of a rename operation
+fn are_files_renamed<'a>(
+    repo: &Repository,
+    old_path_changes: &HashMap<&str, &FileChangeStats>,
+    new_path_changes: &HashMap<&str, &FileChangeStats>,
+) -> Option<HashMap<String, FileChangeStats>> {
+    // Early return if either map is empty
+    if old_path_changes.is_empty() || new_path_changes.is_empty() {
+        return None;
+    }
+
+    let old_path = old_path_changes.keys().next()?;
+    let new_path = new_path_changes.keys().next()?;
+
+    trace!("Checking if files are a result of a rename operation");
+
+    match (
+        repo.status_file(Path::new(old_path)),
+        repo.status_file(Path::new(new_path)),
+    ) {
+        (Ok(Status::WT_DELETED), Ok(Status::WT_NEW)) => {
+            let old_stats = old_path_changes.get(old_path)?;
+            let new_stats = new_path_changes.get(new_path)?;
+
+            // Compare file change statistics with more explicit conditions
+            if are_stats_equivalent(old_stats, new_stats) {
+                debug!("Changes are the result of rename operation");
+
+                let mut renamed_changes = HashMap::new();
+                renamed_changes.insert(
+                    new_path.to_string(),
+                    FileChangeStats {
+                        lines_added: old_stats.lines_added,
+                        lines_deleted: old_stats.lines_deleted,
+                        lines_modified: old_stats.lines_modified,
+                        status: Status::WT_RENAMED,
+                    },
+                );
+
+                return Some(renamed_changes);
+            }
+        }
+        _ => {}
+    }
+
+    None
+}
+
+/// Helper function to check if file change statistics are equivalent
+fn are_stats_equivalent(old_stats: &FileChangeStats, new_stats: &FileChangeStats) -> bool {
+    old_stats.lines_added == new_stats.lines_added
+        && old_stats.lines_deleted == new_stats.lines_deleted
+        && old_stats.lines_modified == new_stats.lines_modified
 }
