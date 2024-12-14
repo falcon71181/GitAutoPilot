@@ -89,10 +89,10 @@ pub fn update_repo(repo: &Repository, force_update: bool) -> Result<(), GitError
 ///
 /// # Returns
 ///
-/// * `Result<HashMap<String, Vec<(Status, FileChangeStats)>>, git2::Error>` - Comprehensive changes grouped by file type
+/// * `Result<HashMap<String, Vec<FileChangeStats>>, git2::Error>` - Comprehensive changes grouped by file type
 pub fn analyze_repository_changes(
     repo: &Repository,
-) -> Result<HashMap<String, Vec<(Status, FileChangeStats)>>, git2::Error> {
+) -> Result<HashMap<String, Vec<FileChangeStats>>, git2::Error> {
     // Create status options
     let mut status_opts = StatusOptions::new();
     status_opts.include_untracked(true);
@@ -105,10 +105,9 @@ pub fn analyze_repository_changes(
 
     // Get repository status to capture all changes
     let statuses = repo.statuses(Some(&mut status_opts))?;
-    debug!("Total statuses found: {}", statuses.len());
 
     // Analyze changes for each file
-    let mut repository_changes: HashMap<String, Vec<(Status, FileChangeStats)>> = HashMap::new();
+    let mut repository_changes: HashMap<String, Vec<FileChangeStats>> = HashMap::new();
 
     for entry in statuses.iter() {
         let status = entry.status();
@@ -146,7 +145,7 @@ pub fn analyze_repository_changes(
             repository_changes
                 .entry(path.to_string())
                 .or_default()
-                .push((status, file_stats));
+                .push(file_stats);
         }
     }
 
