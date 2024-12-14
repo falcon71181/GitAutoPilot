@@ -372,6 +372,7 @@ impl Config {
 
         // Merge repositories
         self.repos.extend(other.repos);
+        self.ignored_dirs.extend(other.ignored_dirs);
     }
 }
 
