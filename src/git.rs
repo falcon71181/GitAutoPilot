@@ -3,12 +3,18 @@ use log::{debug, trace};
 use std::{collections::HashMap, path::Path, process::Command};
 
 /// Detailed information about changes in a file
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FileChangeStats {
+    /// Number of lines added in the file
     pub lines_added: usize,
+    /// Number of lines deleted from the file
     pub lines_deleted: usize,
+    /// Number of lines deleted from the file
     pub lines_modified: usize,
+    /// Overall status of the file change (e.g., added, deleted, modified)
     pub status: Status,
+    /// Original name of the file if renamed
+    pub old_name: Option<String>,
 }
 
 /// Gets the name of the currently checked-out branch.
@@ -134,6 +140,7 @@ pub fn analyze_repository_changes(
                         lines_deleted: stats.deletions(),
                         lines_modified: stats.insertions() + stats.deletions(),
                         status,
+                        old_name: None,
                     }
                 }
                 Err(e) => {
@@ -218,8 +225,8 @@ fn are_files_renamed<'a>(
         return None;
     }
 
-    let old_path = old_path_changes.keys().next()?;
-    let new_path = new_path_changes.keys().next()?;
+    let old_path = *old_path_changes.keys().next()?;
+    let new_path = *new_path_changes.keys().next()?;
 
     trace!("Checking if files are a result of a rename operation");
 
@@ -243,6 +250,7 @@ fn are_files_renamed<'a>(
                         lines_deleted: old_stats.lines_deleted,
                         lines_modified: old_stats.lines_modified,
                         status: Status::WT_RENAMED,
+                        old_name: Some(old_path.to_string()),
                     },
                 );
 
