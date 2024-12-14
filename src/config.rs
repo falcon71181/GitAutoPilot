@@ -101,7 +101,7 @@ impl Drop for ConfigError {
 /// - `description`: Detailed description templates
 /// - `variables`: Custom variables for template substitution
 /// - `repos`: List of repository paths to track
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Config {
     /// Commit summary message templates
     pub message: CommitSummary,
@@ -116,6 +116,10 @@ pub struct Config {
     /// List of repository paths to track
     #[serde(default)]
     pub repos: Vec<PathBuf>,
+
+    /// List of dirs to ignore events
+    #[serde(default)]
+    pub ignored_dirs: Vec<String>,
 }
 
 /// Default system variables
@@ -288,6 +292,7 @@ impl Default for Config {
             description: Description::default(),
             variables: default_variables(),
             repos: Vec::new(),
+            ignored_dirs: vec![".git".to_string()],
         }
     }
 }
