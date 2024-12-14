@@ -135,6 +135,9 @@ impl GitAutoPilot {
         // Directories to watch
         let watch_paths = &self.config.repos;
 
+        // Ignored directories
+        let ignored_dirs: Vec<String> = self.config.ignored_dirs;
+
         // Watch multiple directories
         for path in watch_paths {
             info!("Adding watch for path: {:#?}", path);
@@ -158,6 +161,17 @@ impl GitAutoPilot {
                 Ok(event) => {
                     debug!("Handling event: {:?}", event);
                     trace!("Finding correct repo that triggered event");
+
+                    // Check if the event is in an ignored directory
+                    if event.paths.iter().any(|path| {
+                        ignored_dirs.iter().any(|ignored| {
+                            path.to_string_lossy().contains(&format!("/{}", ignored))
+                        })
+                    }) {
+                        trace!("Ignoring event for paths: {:?}", event.paths);
+                        continue;
+                    }
+
                     if let Some(repo) = get_matching_repository(&event.paths[0], &self.config.repos)
                     {
                         debug!("Matched repository for event: {:?}", repo);
