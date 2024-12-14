@@ -1,5 +1,5 @@
 use git2::{DiffOptions, Error as GitError, Repository, Status, StatusOptions};
-use log::{debug, trace};
+use log::{debug, error, trace};
 use std::{collections::HashMap, path::Path, process::Command};
 
 /// Detailed information about changes in a file
@@ -129,12 +129,11 @@ pub fn analyze_repository_changes(
             // Try to get more detailed diff information
             let file_stats = match repo.diff_index_to_workdir(None, Some(&mut diff_options)) {
                 Ok(diff) => {
-                    // TODO: make it safer
-                    let stats = diff.stats().unwrap();
-                    // let stats = diff.stats().unwrap_or_else(|_| {
-                    //     debug!("No diff stats found for path: {}", path);
-                    //     DiffStats { raw: "" }
-                    // });
+                    let stats = diff.stats().map_err(|e| {
+                        error!("Error retrieving stats: {:?}", e);
+                        e
+                    })?;
+
                     FileChangeStats {
                         lines_added: stats.insertions(),
                         lines_deleted: stats.deletions(),
