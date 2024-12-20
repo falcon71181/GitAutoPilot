@@ -2,7 +2,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 
-use config::ConfigError;
+use config::{ConfigError, GitCred};
 use git2::Repository;
 use log::{debug, error, info, trace, warn};
 use notify::Event;
@@ -61,6 +61,10 @@ pub enum GitAutoPilotError {
     /// Wrapper for standard tokio join errors
     #[error(transparent)]
     TokioJoinError(#[from] JoinError),
+
+    /// Wrapper for standard git2 errors
+    #[error(transparent)]
+    Git2Error(#[from] git2::Error),
 }
 
 // Log the error details when the GitAutoPilotError is being dropped
@@ -285,19 +289,36 @@ fn load_or_create_config(dot_file: &str) -> Result<config::Config, GitAutoPilotE
 /// # Behavior
 /// - Analyzes repository changes for specified file paths.
 /// - Logs detailed information about the changes.
-fn handle_event(event: &Event, repo: &Path) {
+fn handle_event(
+    event: &Event,
+    repo: &Path,
+    git_credentials: Option<GitCred>,
+) -> Result<(), GitAutoPilotError> {
     match event.kind {
         EventKind::Create(_) | EventKind::Modify(_) | EventKind::Remove(_) => {
             for path in &event.paths {
                 trace!("Path  - {}", path.display());
-                info!(
-                    "{:#?}",
-                    git::analyze_repository_changes(&Repository::open(repo).unwrap())
-                );
+                let repo = match Repository::open(repo) {
+                    Ok(repo) => repo,
+                    Err(e) => {
+                        error!("Failed to open repository: {}", e);
+                        continue; // Skip to the next event
+                    }
+                };
+                if let Some(ref cred) = git_credentials {
+                    trace!("Custom user.name: {:#?}", &cred.username);
+                    trace!("Custom user.email: {:#?}", &cred.email);
+                    // Set user configuration (username and email)
+                    let mut config = repo.config()?;
+                    config.set_str("user.name", &cred.username)?;
+                    config.set_str("user.email", &cred.email)?;
+                }
+                info!("{:#?}", git::analyze_repository_changes(&repo));
             }
         }
         _ => {}
     }
+    Ok(())
 }
 
 /// Finds the repository that matches a given file path.
