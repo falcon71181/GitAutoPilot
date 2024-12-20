@@ -19,14 +19,17 @@ use thiserror::Error;
 /// details required for operations such as cloning, pushing, or pulling.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct GitCred {
-    /// The username for authentication.
+    /// The username for committing.
     pub username: String,
 
     /// The email address associated with the Git user.
     pub email: String,
 
+    /// The username for authentication.
+    pub login_username: Option<String>,
+
     /// The password or personal access token for authentication.
-    pub password: String,
+    pub password: Option<String>,
 }
 
 /// Represents a message template with prefix, comment, and suffix
@@ -137,7 +140,7 @@ pub struct Config {
     #[serde(default)]
     pub ignored_dirs: Vec<String>,
 
-    /// List of dirs to ignore events
+    /// contains git credentials
     #[serde(default)]
     pub git_credentials: Option<GitCred>,
 }
