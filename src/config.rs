@@ -13,6 +13,22 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use thiserror::Error;
 
+/// Represents credentials for authenticating with a Git repository.
+///
+/// This structure is used to store and manage the authentication
+/// details required for operations such as cloning, pushing, or pulling.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct GitCred {
+    /// The username for authentication.
+    pub username: String,
+
+    /// The email address associated with the Git user.
+    pub email: String,
+
+    /// The password or personal access token for authentication.
+    pub password: String,
+}
+
 /// Represents a message template with prefix, comment, and suffix
 ///
 /// This struct defines the format for generating commit messages. It includes:
@@ -120,6 +136,10 @@ pub struct Config {
     /// List of dirs to ignore events
     #[serde(default)]
     pub ignored_dirs: Vec<String>,
+
+    /// List of dirs to ignore events
+    #[serde(default)]
+    pub git_credentials: Option<GitCred>,
 }
 
 /// Default system variables
@@ -293,6 +313,7 @@ impl Default for Config {
             variables: default_variables(),
             repos: Vec::new(),
             ignored_dirs: vec![".git".to_string()],
+            git_credentials: None,
         }
     }
 }
