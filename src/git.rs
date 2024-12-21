@@ -349,6 +349,49 @@ pub fn commit(repo: &Repository, message: &str) -> Result<(), GitError> {
         repo.commit(Some("HEAD"), &signature, &signature, message, &tree, &[])? // Initial commit
     };
 
-    println!("Created commit with id: {}", commit_id);
+    info!("Created commit with id: {}", commit_id);
+    Ok(())
+}
+
+/// Push changes to the specified remote repository branch.
+///
+/// # Parameters
+/// - `repo`: A reference to the local Git repository.
+/// - `git_username`: The username for authentication with the remote repository.
+/// - `git_password`: The password for authentication with the remote repository.
+/// - `remote_name`: The name of the remote repository (e.g., "origin").
+/// - `branch`: The name of the branch to push to the remote repository.
+///
+/// # Returns
+/// - `Result<(), GitError>`: Returns `Ok(())` on success, or an error of type `GitError` on failure.
+pub fn push(
+    repo: &Repository,
+    git_username: &str,
+    git_password: &str,
+    remote_name: &str,
+    branch: &str,
+) -> Result<(), GitError> {
+    // Find the specified remote repository
+    let mut remote = repo.find_remote(remote_name)?;
+    trace!("Found remote: {}", remote_name);
+
+    // Set up remote callbacks for authentication
+    let mut callbacks = git2::RemoteCallbacks::new();
+    callbacks.credentials(|_url, username_from_url, _allowed_types| {
+        trace!("Using credentials for remote: {:#?}", username_from_url);
+        git2::Cred::userpass_plaintext(git_username, git_password)
+    });
+
+    // Set up push options with the callbacks
+    let mut options = git2::PushOptions::new();
+    options.remote_callbacks(callbacks);
+
+    // Attempt to push the specified branch to the remote
+    remote.push(&[&format!("refs/heads/{}", branch)], Some(&mut options))?;
+    info!(
+        "Successfully pushed branch '{}' to remote '{}'",
+        branch, remote_name
+    );
+
     Ok(())
 }
