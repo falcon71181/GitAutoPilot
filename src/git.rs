@@ -324,3 +324,31 @@ pub fn stage_file(repo: &Repository, file_path: impl AsRef<Path>) -> Result<(), 
     info!("Staged file: {}", file_path.as_ref().display());
     Ok(())
 }
+
+/// Commit staged changes
+pub fn commit(repo: &Repository, message: &str) -> Result<(), GitError> {
+    let signature = repo.signature()?;
+    let mut index = repo.index()?;
+    let tree_id = index.write_tree()?;
+    let tree = repo.find_tree(tree_id)?;
+    let parent_commit = match repo.head() {
+        Ok(head) => Some(head.peel_to_commit()?),
+        Err(_) => None, // For initial commit
+    };
+
+    let commit_id = if let Some(parent) = parent_commit {
+        repo.commit(
+            Some("HEAD"),
+            &signature,
+            &signature,
+            message,
+            &tree,
+            &[&parent],
+        )?
+    } else {
+        repo.commit(Some("HEAD"), &signature, &signature, message, &tree, &[])? // Initial commit
+    };
+
+    println!("Created commit with id: {}", commit_id);
+    Ok(())
+}
