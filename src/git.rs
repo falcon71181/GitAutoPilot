@@ -1,5 +1,5 @@
-use git2::{DiffOptions, Error as GitError, Repository, Status, StatusOptions};
-use log::{debug, error, trace};
+use git2::{DiffOptions, Error as GitError, IndexAddOption, Repository, Status, StatusOptions};
+use log::{debug, error, info, trace};
 use std::{collections::HashMap, path::Path, process::Command};
 
 /// Detailed information about changes in a file
@@ -267,4 +267,35 @@ fn are_stats_equivalent(old_stats: &FileChangeStats, new_stats: &FileChangeStats
     old_stats.lines_added == new_stats.lines_added
         && old_stats.lines_deleted == new_stats.lines_deleted
         && old_stats.lines_modified == new_stats.lines_modified
+}
+
+/// Stages files in a Git repository matching a given pattern.
+///
+/// This function is best used when you need to stage multiple files at once
+/// or when using wildcards (e.g., "*.rs", "src/*").
+///
+/// # Arguments
+/// * `repo_path` - Path to the Git repository
+/// * `file_pattern` - Pattern to match files (e.g., "*", "*.rs", "src/")
+///
+/// # Errors
+/// Returns `GitError` if:
+/// * Repository cannot be opened
+/// * Index cannot be accessed
+/// * Pattern is invalid
+/// * Writing to index fails
+pub fn add_files(repo_path: impl AsRef<Path>, file_pattern: &str) -> Result<(), GitError> {
+    let repo = Repository::open(repo_path)?;
+    let mut index = repo.index()?;
+
+    // Use a transaction-like approach for atomic operations
+    index.add_all(
+        [file_pattern].iter(),
+        IndexAddOption::DEFAULT | IndexAddOption::CHECK_PATHSPEC,
+        None,
+    )?;
+
+    index.write()?;
+    info!("Added files matching pattern: {}", file_pattern);
+    Ok(())
 }
