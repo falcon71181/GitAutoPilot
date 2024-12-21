@@ -1,8 +1,8 @@
-use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
+use std::{fs, path};
 
-use config::{ConfigError, GitCred};
+use config::{Config, ConfigError, GitCred};
 use git2::Repository;
 use log::{debug, error, info, trace, warn};
 use notify::Event;
@@ -34,6 +34,12 @@ pub struct GitAutoPilot {
 
 /// Constant for the default dot directory path
 const DOT_DIR: &str = ".config/git-auto-pilot";
+
+/// Constant for the default git credentials file
+const DOT_GIT_CREDENTIALS: &str = ".git-credentials";
+
+/// Constant for the default git config file
+const DOT_GIT_CONFIG: &str = ".gitconfig";
 
 /// Custom error types for GitAutoPilot operations
 #[derive(Error, Debug)]
@@ -163,18 +169,17 @@ impl GitAutoPilot {
         while let Some(result) = async_rx.recv().await {
             match result {
                 Ok(event) => {
-                    debug!("Handling event: {:?}", event);
-                    trace!("Finding correct repo that triggered event");
-
                     // Check if the event is in an ignored directory
                     if event.paths.iter().any(|path| {
                         ignored_dirs.iter().any(|ignored| {
                             path.to_string_lossy().contains(&format!("/{}", ignored))
                         })
                     }) {
-                        trace!("Ignoring event for paths: {:?}", event.paths);
                         continue;
                     }
+
+                    debug!("Handling event: {:?}", event);
+                    trace!("Finding correct repo that triggered event");
 
                     if let Some(repo) = get_matching_repository(&event.paths[0], &self.config.repos)
                     {
@@ -203,25 +208,7 @@ impl GitAutoPilot {
 /// # Errors
 /// Returns a `GitAutoPilotError` if home directory cannot be determined
 fn get_dot_dir_path() -> Result<String, GitAutoPilotError> {
-    trace!("Attempting to retrieve home directory");
-
-    let home_dir_from_dirs = dir::home_dir();
-
-    let dot_dir = home_dir_from_dirs
-        .map(|path| format!("{}/{}", path.display(), DOT_DIR))
-        .or_else(|| {
-            warn!("Could not retrieve home directory via dirs");
-            std::env::var("HOME")
-                .map(|home| format!("{}/{}", home, DOT_DIR))
-                .ok()
-        })
-        .ok_or_else(|| {
-            error!("Failed to determine home directory through both dirs and HOME environment variable");
-            GitAutoPilotError::HomeDirError
-        })?;
-
-    trace!("Home directory for dot directory determined: {}", dot_dir);
-    Ok(dot_dir)
+    get_git_path(DOT_DIR)
 }
 
 /// Ensures the dot directory exists, creating it if necessary
@@ -297,7 +284,7 @@ fn handle_event(
     match event.kind {
         EventKind::Create(_) | EventKind::Modify(_) | EventKind::Remove(_) => {
             for path in &event.paths {
-                trace!("Path  - {}", path.display());
+                trace!("Path  - {}", &path.display());
                 let repo = match Repository::open(repo) {
                     Ok(repo) => repo,
                     Err(e) => {
@@ -313,7 +300,15 @@ fn handle_event(
                     config.set_str("user.name", &cred.username)?;
                     config.set_str("user.email", &cred.email)?;
                 }
-                info!("{:#?}", git::analyze_repository_changes(&repo));
+                let git_changes = git::analyze_repository_changes(&repo)?;
+                info!("{:#?}", git_changes);
+                let file_name = path
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .unwrap_or_default();
+                let file_change_stats = git_changes.get(file_name).unwrap();
+                trace!("{:#?} staging", &path.display());
+                let _git_stage_file = git::stage_file(&repo, file_name)?;
             }
         }
         _ => {}
@@ -341,4 +336,31 @@ fn get_matching_repository<P: AsRef<Path>>(path: P, repos: &[PathBuf]) -> Option
             })
         })
         .map(|r| r.as_path())
+}
+
+/// Returns the path to a git-related file in the user's home directory
+///
+/// # Arguments
+/// * `filename` - Name of the file to locate (e.g., ".git-credentials", ".gitconfig")
+///
+/// # Returns
+/// * `Result<String, GitAutoPilotError>` - Full path to the file if successful
+///
+/// # Errors
+/// * `GitAutoPilotError::HomeDirError` - If home directory cannot be determined
+fn get_git_path(filename: &str) -> Result<String, GitAutoPilotError> {
+    trace!("Attempting to locate {}", filename);
+
+    dir::home_dir()
+        .map(|path| format!("{}/{}", path.display(), filename))
+        .or_else(|| {
+            warn!("Could not retrieve home directory via dirs");
+            std::env::var("HOME")
+                .map(|home| format!("{}/{}", home, filename))
+                .ok()
+        })
+        .ok_or_else(|| {
+            error!("Failed to determine home directory");
+            GitAutoPilotError::HomeDirError
+        })
 }
