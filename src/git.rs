@@ -299,3 +299,28 @@ pub fn add_files(repo_path: impl AsRef<Path>, file_pattern: &str) -> Result<(), 
     info!("Added files matching pattern: {}", file_pattern);
     Ok(())
 }
+
+/// Stages a single file in a Git repository.
+///
+/// This function is optimized for staging individual files and provides more
+/// precise control over what gets staged. Use this when you need to stage
+/// specific files one at a time.
+///
+/// # Arguments
+/// * `repo` - Reference to the Git repository
+/// * `file_path` - Path to the file to stage (relative to repository root)
+///
+/// # Errors
+/// Returns `GitError` if:
+/// * File path is invalid
+/// * File doesn't exist
+/// * Index cannot be accessed
+/// * Writing to index fails
+pub fn stage_file(repo: &Repository, file_path: impl AsRef<Path>) -> Result<(), GitError> {
+    let mut index = repo.index()?;
+    index.add_path(file_path.as_ref())?;
+    index.write()?;
+
+    info!("Staged file: {}", file_path.as_ref().display());
+    Ok(())
+}
