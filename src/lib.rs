@@ -179,7 +179,7 @@ impl GitAutoPilot {
                     if let Some(repo) = get_matching_repository(&event.paths[0], &self.config.repos)
                     {
                         debug!("Matched repository for event: {:?}", repo);
-                        handle_event(&event, &repo);
+                        let _ = handle_event(&event, &repo, &self.config.git_credentials);
                     } else {
                         debug!("No matching repository found for paths: {:?}", event.paths);
                     }
@@ -292,7 +292,7 @@ fn load_or_create_config(dot_file: &str) -> Result<config::Config, GitAutoPilotE
 fn handle_event(
     event: &Event,
     repo: &Path,
-    git_credentials: Option<GitCred>,
+    git_credentials: &Option<GitCred>,
 ) -> Result<(), GitAutoPilotError> {
     match event.kind {
         EventKind::Create(_) | EventKind::Modify(_) | EventKind::Remove(_) => {
