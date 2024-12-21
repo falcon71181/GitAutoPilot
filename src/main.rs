@@ -1,6 +1,7 @@
 use git_auto_pilot::GitAutoPilot;
 
 mod config;
+mod error;
 mod git;
 mod helper;
 mod logger;
