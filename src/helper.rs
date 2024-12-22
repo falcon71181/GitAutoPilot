@@ -122,62 +122,116 @@ pub fn get_git_path(filename: &str) -> Result<String, GitAutoPilotError> {
 /// 4. Read git config for email and username
 /// 5. Populate the config struct with all credentials
 pub fn populate_git_credentials(config: &mut Config) -> Result<(), GitAutoPilotError> {
-    if config.git_credentials.is_some() {
-        trace!("Git credentials already populated");
-        return Ok(());
+    // Initialize git_credentials if None
+    if config.git_credentials.is_none() {
+        config.git_credentials = Some(GitCred {
+            login_username: None,
+            password: None,
+            email: String::new(),
+            username: String::new(),
+        });
     }
 
-    debug!("Attempting to populate git credentials");
-    let dot_git_credentials = get_git_path(DOT_GIT_CREDENTIALS)?;
-    let dot_git_config = get_git_path(DOT_GIT_CONFIG)?;
+    let git_cred = config.git_credentials.as_mut().unwrap();
 
-    // Read credentials file
-    let credentials_path = Path::new(&dot_git_credentials);
-    let credentials_content = std::fs::read_to_string(credentials_path).map_err(|err| {
-        error!(
-            "Failed to read .git-credentials at {}: {}",
-            credentials_path.display(),
-            err
-        );
-        GitAutoPilotError::ConfigError(ConfigError::FileError(format!(
-            "Failed to read .git-credentials at: {}",
-            credentials_path.display()
-        )))
-    })?;
+    // Check if we need to parse .git-credentials
+    let needs_git_credentials = git_cred
+        .login_username
+        .as_ref()
+        .map_or(true, |username| username.is_empty())
+        || git_cred
+            .password
+            .as_ref()
+            .map_or(true, |password| password.is_empty());
 
-    // Parse GitHub credentials
-    let (username, password) =
-        parse_specific_domain_credentials(&credentials_content, "github.com")?;
+    if needs_git_credentials {
+        debug!("Attempting to populate git credentials from .git-credentials");
+        let dot_git_credentials = get_git_path(DOT_GIT_CREDENTIALS)?;
 
-    // Read git config
-    let config_path = Path::new(&dot_git_config);
-    let config_content = std::fs::read_to_string(config_path).map_err(|err| {
-        error!(
-            "Failed to read .gitconfig at {}: {}",
-            config_path.display(),
-            err
-        );
-        GitAutoPilotError::ConfigError(ConfigError::FileError(format!(
-            "Failed to read .gitconfig at: {}",
-            config_path.display()
-        )))
-    })?;
+        // Read credentials file
+        let credentials_path = Path::new(&dot_git_credentials);
+        let credentials_content = std::fs::read_to_string(credentials_path).map_err(|err| {
+            error!(
+                "Failed to read .git-credentials at {}: {}",
+                credentials_path.display(),
+                err
+            );
+            GitAutoPilotError::ConfigError(ConfigError::FileError(format!(
+                "Failed to read .git-credentials at: {}",
+                credentials_path.display()
+            )))
+        })?;
 
-    let (git_email, git_username) = parse_git_config(&config_content)?;
+        // Parse GitHub credentials
+        let (username, password) =
+            parse_specific_domain_credentials(&credentials_content, "github.com")?;
+
+        // Only update if values are None or empty
+        if git_cred
+            .login_username
+            .as_ref()
+            .map_or(true, |login_username| login_username.is_empty())
+        {
+            git_cred.login_username = Some(username);
+        }
+        if git_cred
+            .password
+            .as_ref()
+            .map_or(true, |password| password.is_empty())
+        {
+            git_cred.password = Some(password);
+        }
+    }
+
+    // Check if we need to parse .gitconfig
+    let needs_git_config = git_cred.username.is_empty() || git_cred.email.is_empty();
+
+    if needs_git_config {
+        debug!("Attempting to populate git config values");
+        let dot_git_config = get_git_path(DOT_GIT_CONFIG)?;
+        let config_path = Path::new(&dot_git_config);
+        let config_content = std::fs::read_to_string(config_path).map_err(|err| {
+            error!(
+                "Failed to read .gitconfig at {}: {}",
+                config_path.display(),
+                err
+            );
+            GitAutoPilotError::ConfigError(ConfigError::FileError(format!(
+                "Failed to read .gitconfig at: {}",
+                config_path.display()
+            )))
+        })?;
+
+        let (git_email, git_username) = parse_git_config(&config_content)?;
+
+        // Only update if values are empty
+        if git_cred.email.is_empty() {
+            git_cred.email = git_email;
+        }
+        if git_cred.username.is_empty() {
+            git_cred.username = git_username;
+        }
+    }
 
     trace!(
-        "Git credentials populated - Username: {}, Email: {}, Password: {}",
-        username,
-        git_email,
-        "*******"
+        "Git credentials status - Username: {}, Email: {}, Login Username: {}, Password: {}",
+        if git_cred.username.is_empty() {
+            "not set"
+        } else {
+            &git_cred.username
+        },
+        if git_cred.email.is_empty() {
+            "not set"
+        } else {
+            &git_cred.email
+        },
+        git_cred.login_username.as_deref().unwrap_or("not set"),
+        if git_cred.password.is_some() {
+            "*******"
+        } else {
+            "not set"
+        }
     );
-
-    config.git_credentials = Some(GitCred {
-        login_username: Some(username),
-        password: Some(password),
-        email: git_email,
-        username: git_username,
-    });
 
     Ok(())
 }
@@ -192,7 +246,7 @@ pub fn parse_specific_domain_credentials(
             if let Some(credentials) = line.strip_prefix("https://") {
                 if let Some((user_pass, _)) = credentials.split_once('@') {
                     if let Some((user, pass)) = user_pass.split_once(':') {
-                        return Ok((user.to_string(), pass.to_string()));
+                        return Ok((user.trim().to_string(), pass.trim().to_string()));
                     }
                 }
             }
@@ -213,9 +267,9 @@ pub fn parse_git_config(content: &str) -> Result<(String, String), GitAutoPilotE
     for line in content.lines() {
         let line = line.trim();
         if line.starts_with("email = ") {
-            email = line.trim_start_matches("email = ").to_string();
+            email = line.trim_start_matches("email = ").trim().to_string();
         } else if line.starts_with("name = ") {
-            username = line.trim_start_matches("name = ").to_string();
+            username = line.trim_start_matches("name = ").trim().to_string();
         }
     }
 
