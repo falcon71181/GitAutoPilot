@@ -325,12 +325,37 @@ pub fn stage_file(repo: &Repository, file_path: impl AsRef<Path>) -> Result<(), 
     Ok(())
 }
 
-/// Commit staged changes
-pub fn commit(repo: &Repository, message: &str) -> Result<(), GitError> {
+/// Creates a new commit in the git repository with an optional description.
+///
+/// # Arguments
+/// * `repo` - Reference to the git Repository where the commit will be created
+/// * `message` - The main commit message (subject line)
+/// * `description` - Optional detailed description of the commit (commit body)
+///
+/// # Errors
+/// Returns a `GitError` if:
+/// - Failed to get repository signature
+/// - Failed to access or write repository index
+/// - Failed to create tree from index
+/// - Failed to create the commit
+///
+/// # Notes
+/// - For initial commits (no previous commits), it handles the case appropriately
+/// - Uses the same signature for author and committer
+/// - Automatically handles HEAD reference update
+pub fn commit(repo: &Repository, message: &str, description: Option<&str>) -> Result<(), GitError> {
     let signature = repo.signature()?;
     let mut index = repo.index()?;
     let tree_id = index.write_tree()?;
     let tree = repo.find_tree(tree_id)?;
+
+    // Format commit message with description if provided
+    let full_message = if let Some(desc) = description {
+        format!("{}\n\n{}", message, desc)
+    } else {
+        message.to_string()
+    };
+
     let parent_commit = match repo.head() {
         Ok(head) => Some(head.peel_to_commit()?),
         Err(_) => None, // For initial commit
@@ -341,15 +366,28 @@ pub fn commit(repo: &Repository, message: &str) -> Result<(), GitError> {
             Some("HEAD"),
             &signature,
             &signature,
-            message,
+            &full_message,
             &tree,
             &[&parent],
         )?
     } else {
-        repo.commit(Some("HEAD"), &signature, &signature, message, &tree, &[])? // Initial commit
+        // Initial commit
+        repo.commit(
+            Some("HEAD"),
+            &signature,
+            &signature,
+            &full_message,
+            &tree,
+            &[],
+        )?
     };
 
-    info!("Created commit with id: {}", commit_id);
+    info!(
+        "Created commit with id: {}\nMessage: {}\nDescription: {}",
+        commit_id,
+        message,
+        description.unwrap_or("None")
+    );
     Ok(())
 }
 
