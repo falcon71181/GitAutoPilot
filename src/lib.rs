@@ -1,5 +1,4 @@
 use std::fs;
-use std::mem::take;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 
