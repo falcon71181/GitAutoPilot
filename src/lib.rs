@@ -261,6 +261,10 @@ fn handle_event(
                     config.set_str("user.email", &cred.email)?;
                 }
                 let git_changes = git::analyze_repository_changes(&repo)?;
+                if git_changes.is_empty() {
+                    trace!("No git changes found");
+                    continue;
+                }
                 info!("{:#?}", git_changes);
                 let file_name = path
                     .file_name()
