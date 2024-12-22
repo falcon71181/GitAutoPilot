@@ -1,10 +1,12 @@
 use std::fs;
+use std::mem::take;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 
 use config::{ConfigError, GitCred};
 use error::GitAutoPilotError;
-use git2::Repository;
+use git::FileChangeStats;
+use git2::{Repository, Status};
 use log::{debug, error, info, trace};
 use notify::Event;
 use notify::EventKind;
@@ -265,12 +267,80 @@ fn handle_event(
                     .file_name()
                     .and_then(|name| name.to_str())
                     .unwrap_or_default();
-                let file_change_stats = git_changes.get(file_name).unwrap();
-                trace!("{:#?} staging", &path.display());
-                let _git_stage_file = git::stage_file(&repo, file_name)?;
+                if let Some(stats) = git_changes
+                    .get(file_name)
+                    // NOTE: in case of rename operation, take first value
+                    .or_else(|| git_changes.values().next())
+                {
+                    if let Some(file_changes) = stats.first() {
+                        match file_changes.status {
+                            Status::WT_RENAMED => {
+                                trace!("Rename operation found");
+                                let _take_git_action = take_action(
+                                    &repo,
+                                    file_changes,
+                                    git_changes.keys().next().unwrap(),
+                                    &format!(
+                                        "{}/{}",
+                                        path.to_str()
+                                            .unwrap_or_default()
+                                            .split("/")
+                                            .collect::<Vec<&str>>()[..path
+                                            .to_str()
+                                            .unwrap_or_default()
+                                            .split("/")
+                                            .count()
+                                            - 1]
+                                            .join("/"),
+                                        git_changes.keys().next().unwrap()
+                                    ),
+                                );
+                            }
+                            _ => {
+                                let _take_git_action = take_action(
+                                    &repo,
+                                    file_changes,
+                                    file_name,
+                                    path.to_str().unwrap_or(file_name),
+                                );
+                            }
+                        }
+                    }
+                } else {
+                    continue;
+                }
             }
         }
         _ => {}
+    }
+    Ok(())
+}
+
+fn take_action(
+    repo: &Repository,
+    file_change_stats: &FileChangeStats,
+    short_file_name: &str,
+    full_file_name: &str,
+) -> Result<(), GitAutoPilotError> {
+    debug!(
+        "DEBUGPRINT[10]: lib.rs:317: full_file_name={:#?}",
+        full_file_name
+    );
+    debug!(
+        "DEBUGPRINT[11]: lib.rs:321: short_file_name={:#?}",
+        short_file_name
+    );
+    trace!("{:#?} staging", full_file_name);
+    match file_change_stats.status {
+        Status::WT_RENAMED => {
+            let _git_stage_file = git::stage_file(&repo, short_file_name, false)?;
+            if let Some(old_name) = file_change_stats.old_name.as_ref() {
+                let _git_stage_file = git::stage_file(&repo, old_name, true)?;
+            }
+        }
+        _ => {
+            let _git_stage_file = git::stage_file(&repo, short_file_name, false)?;
+        }
     }
     Ok(())
 }

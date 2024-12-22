@@ -316,11 +316,23 @@ pub fn add_files(repo_path: impl AsRef<Path>, file_pattern: &str) -> Result<(), 
 /// * File doesn't exist
 /// * Index cannot be accessed
 /// * Writing to index fails
-pub fn stage_file(repo: &Repository, file_path: impl AsRef<Path>) -> Result<(), GitError> {
+pub fn stage_file(
+    repo: &Repository,
+    file_path: impl AsRef<Path>,
+    is_deleted: bool,
+) -> Result<(), GitError> {
     let mut index = repo.index()?;
-    index.add_path(file_path.as_ref())?;
-    index.write()?;
 
+    if is_deleted {
+        // NOTE: Handle deleted file by removing it from the index
+        debug!("File is removed: {}", &file_path.as_ref().display());
+        index.remove_path(file_path.as_ref())?;
+    } else {
+        trace!("File is either modified or addded");
+        index.add_path(file_path.as_ref())?;
+    }
+
+    index.write()?;
     info!("Staged file: {}", file_path.as_ref().display());
     Ok(())
 }
