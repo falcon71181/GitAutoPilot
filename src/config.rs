@@ -67,6 +67,9 @@ pub struct CommitSummary {
 
     /// Template for file removal events
     pub remove: Message,
+
+    /// Template for file rename events
+    pub rename: Message,
 }
 
 /// Defines detailed description templates for different operation types
@@ -86,6 +89,9 @@ pub struct Description {
 
     /// Template for file removal descriptions
     pub remove: Message,
+
+    /// Template for file rename descriptions
+    pub rename: Message,
 }
 
 /// Configuration error types
@@ -156,14 +162,15 @@ pub struct Config {
 /// - `STATUS`: Current status (e.g., staged, modified)
 /// - `FILE_NAME_SHORT`: Short file name
 /// - `FILE_NAME_FULL`: Full file name
-const SYSTEM_VARIABLES: &[(&str, &str)] = &[
-    ("INSERTIONS", "insertions"),
-    ("DELETIONS", "deletions"),
-    ("LINES_MODIFIED", "lines_modified"),
-    ("BRANCH", "branch"),
-    ("STATUS", "status"),
-    ("FILE_NAME_SHORT", "file_name_short"),
-    ("FILE_NAME_FULL", "file_name_full"),
+pub const SYSTEM_VARIABLES: &[(&str, &str)] = &[
+    ("INSERTIONS", "INSERTIONS"),
+    ("DELETIONS", "DELETIONS"),
+    ("LINES_MODIFIED", "LINES_MODIFIED"),
+    ("BRANCH", "BRANCH"),
+    ("STATUS", "STATUS"),
+    ("FILE_NAME_SHORT", "FILE_NAME_SHORT"),
+    ("FILE_NAME_FULL", "FILE_NAME_FULL"),
+    ("FILE_OLD_NAME", "FILE_OLD_NAME"),
 ];
 
 /// Creates default variables with system and custom variables
@@ -185,12 +192,6 @@ fn default_variables() -> serde_json::Value {
         );
     }
 
-    // Optional: Add a custom variable example
-    vars.insert(
-        "example_var".to_string(),
-        serde_json::Value::String("example_value".to_string()),
-    );
-
     serde_json::Value::Object(vars)
 }
 
@@ -210,6 +211,7 @@ impl Default for CommitSummary {
             create: Message::default(),
             modify: Message::default(),
             remove: Message::default(),
+            rename: Message::default(),
         }
     }
 }
@@ -238,6 +240,11 @@ impl CommitSummary {
             remove: Message {
                 prefix: String::new(),
                 comment: "File Removed: {{FILE_NAME_SHORT}}".to_string(),
+                suffix: String::new(),
+            },
+            rename: Message {
+                prefix: String::new(),
+                comment: "File Renamed: {{FILE_NAME_SHORT}}".to_string(),
                 suffix: String::new(),
             },
         }
@@ -286,6 +293,19 @@ impl Description {
                 prefix: String::new(),
                 comment: concat!(
                     "File Removed\n",
+                    "File short name: {{FILE_NAME_SHORT}}\n",
+                    "File full name: {{FILE_NAME_FULL}}\n",
+                    "No. of lines inserted: {{INSERTIONS}}\n",
+                    "No. of lines deleted: {{DELETIONS}}\n",
+                    "No. of lines modified: {{LINES_MODIFIED}}"
+                )
+                .to_string(),
+                suffix: String::new(),
+            },
+            rename: Message {
+                prefix: String::new(),
+                comment: concat!(
+                    "File Renamed\n",
                     "File short name: {{FILE_NAME_SHORT}}\n",
                     "File full name: {{FILE_NAME_FULL}}\n",
                     "No. of lines inserted: {{INSERTIONS}}\n",
