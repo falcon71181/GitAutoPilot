@@ -1,3 +1,4 @@
+use git2::Status;
 use log::{debug, error, trace, warn};
 use notify::{Config as NotifyConfig, Event, RecommendedWatcher, Watcher, WatcherKind};
 use std::path::{Path, PathBuf};
@@ -282,3 +283,22 @@ pub fn parse_git_config(content: &str) -> Result<(String, String), GitAutoPilotE
 
     Ok((email, username))
 }
+
+pub fn status_to_string(status: Status) -> String {
+    match status {
+        Status::WT_NEW => "WT_NEW".to_string(),
+        Status::WT_MODIFIED => "WT_MODIFIED".to_string(),
+        Status::WT_DELETED => "WT_DELETED".to_string(),
+        Status::WT_RENAMED => "WT_RENAMED".to_string(),
+        Status::WT_TYPECHANGE => "WT_TYPECHANGE".to_string(),
+        Status::INDEX_NEW => "INDEX_NEW".to_string(),
+        Status::INDEX_MODIFIED => "INDEX_MODIFIED".to_string(),
+        Status::INDEX_DELETED => "INDEX_DELETED".to_string(),
+        Status::INDEX_RENAMED => "INDEX_RENAMED".to_string(),
+        Status::INDEX_TYPECHANGE => "INDEX_TYPECHANGE".to_string(),
+        Status::CONFLICTED => "CONFLICTED".to_string(),
+        Status::IGNORED => "IGNORED".to_string(),
+        _ => "UNKNOWN".to_string(),
+    }
+}
+
