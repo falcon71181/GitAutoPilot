@@ -194,7 +194,7 @@ impl GitAutoPilot {
                         trace!("No git changes found");
                         continue;
                     }
-                    debug!("DEBUGPRINT[12]: lib.rs:268: git_changes={:#?}", git_changes);
+                    debug!("git_changes={:#?}", git_changes);
                     let file_name = path
                         .file_name()
                         .and_then(|name| name.to_str())
@@ -257,14 +257,8 @@ impl GitAutoPilot {
         short_file_name: &str,
         full_file_name: &str,
     ) -> Result<(), GitAutoPilotError> {
-        debug!(
-            "DEBUGPRINT[10]: lib.rs:317: full_file_name={:#?}",
-            full_file_name
-        );
-        debug!(
-            "DEBUGPRINT[11]: lib.rs:321: short_file_name={:#?}",
-            short_file_name
-        );
+        debug!("full_file_name={:#?}", full_file_name);
+        debug!("short_file_name={:#?}", short_file_name);
         trace!("{:#?} staging", full_file_name);
         let repo_branch = git::get_current_branch(repo).unwrap_or("master".to_string());
         let dynamic_values = Self::prepare_dynamic_values(
@@ -425,10 +419,7 @@ impl GitAutoPilot {
                 }
             }
         }
-        trace!(
-            "DEBUGPRINT[14]: lib.rs:421: dynamic_values={:#?}",
-            dynamic_values
-        );
+        trace!("dynamic_values={:#?}", dynamic_values);
         dynamic_values
     }
 }
