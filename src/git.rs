@@ -323,17 +323,26 @@ pub fn stage_file(
 ) -> Result<(), GitError> {
     let mut index = repo.index()?;
 
+    // Get the absolute path of the file
+    let file_path = file_path.as_ref();
+
+    // Get the repository's root path
+    let repo_path = repo.path().parent().unwrap(); // Get the parent directory of the .git folder
+
+    // Convert the file path to a relative path
+    let relative_path = file_path.strip_prefix(repo_path).unwrap_or(file_path);
+
     if is_deleted {
-        // NOTE: Handle deleted file by removing it from the index
-        debug!("File is removed: {}", &file_path.as_ref().display());
-        index.remove_path(file_path.as_ref())?;
+        // Handle deleted file by removing it from the index
+        debug!("File is removed: {}", relative_path.display());
+        index.remove_path(relative_path)?;
     } else {
-        trace!("File is either modified or addded");
-        index.add_path(file_path.as_ref())?;
+        trace!("File is either modified or added");
+        index.add_path(relative_path)?;
     }
 
     index.write()?;
-    info!("Staged file: {}", file_path.as_ref().display());
+    info!("Staged file: {}", relative_path.display());
     Ok(())
 }
 

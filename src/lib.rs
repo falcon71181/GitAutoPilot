@@ -196,11 +196,14 @@ impl GitAutoPilot {
                     }
                     debug!("git_changes={:#?}", git_changes);
                     let file_name = path
-                        .file_name()
-                        .and_then(|name| name.to_str())
-                        .unwrap_or_default();
+                        .display()
+                        .to_string()
+                        .strip_prefix(repo.path().parent().unwrap().to_str().unwrap_or_default())
+                        .unwrap_or_default()
+                        .to_string()[1..]
+                        .to_string();
                     if let Some(stats) = git_changes
-                        .get(file_name)
+                        .get(&file_name)
                         // NOTE: in case of rename operation, take first value
                         .or_else(|| git_changes.values().next())
                     {
@@ -234,8 +237,8 @@ impl GitAutoPilot {
                                         self,
                                         &repo,
                                         file_changes,
-                                        file_name,
-                                        path.to_str().unwrap_or(file_name),
+                                        &file_name,
+                                        path.to_str().unwrap_or(&file_name),
                                     );
                                 }
                             }
@@ -290,10 +293,10 @@ impl GitAutoPilot {
                 }
             }
             Status::WT_RENAMED => {
-                let _git_stage_file = git::stage_file(&repo, short_file_name, false)?;
                 if let Some(old_name) = file_change_stats.old_name.as_ref() {
                     let _git_stage_file = git::stage_file(&repo, old_name, true)?;
                 }
+                let _git_stage_file = git::stage_file(&repo, short_file_name, false)?;
                 let (message, description) = get_commit_summary(
                     dynamic_values,
                     &self.config.message.rename,
